@@ -1,6 +1,7 @@
 # Fin211-Big Data
 # Classification Project
-# Red Wine Quality 
+# Red Wine Quality
+# Authors: Xiaolu Yu, Aileen Kate Fu
 
 # Background
 # Multi-class classification, numeric inputs
