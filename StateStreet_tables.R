@@ -1,4 +1,5 @@
 # ThiS R file is only a part of the whole codings. It only includes the main part of the tables replication.
+# Authors: Zhenyu Chen, Aileen Kate Fu, Keyu Jin, Sirui Jiang
 
 ### Table 2 #####
 library(dplyr)
@@ -382,7 +383,7 @@ write.csv(table5_abnormalRet, 'section5/table5_abnormalReturn_matrix.csv', row.n
 library(dplyr)
 
 # load data
-setwd("/Users/Ella/Documents/研究�?/Field Project/Bridge/SP500")
+setwd("/Users/Ella/Documents/ç ç©¶ç?/Field Project/Bridge/SP500")
 data <- read.csv('2_data_table4.csv')
 qmj_raw<-read.csv('data_table5_cleaned.csv')
 
@@ -576,7 +577,7 @@ write.csv(table6, 'table6.csv', row.names=TRUE)
 library(dplyr)
 
 # load data
-setwd("/Users/Ella/Documents/研究�?/Field Project/Bridge/SP500")
+setwd("/Users/Ella/Documents/ç ç©¶ç?/Field Project/Bridge/SP500")
 data <- read.csv('2_data_table4.csv')
 qmj_raw<-read.csv('data_table5_cleaned.csv')
 
