@@ -1,0 +1,525 @@
+---
+title: "Da Da Da_PM2.5_Cluster"
+author: "Da Da Da"
+date: "April 16, 2020"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    theme: cosmo
+    highlight: monochrome
+    toc: ture
+    toc_float: false
+    toc_depth: 4
+    number_sections: true
+    code_folding: hide
+---
+
+## Part 1: Introduction
+
+background domain knowledge of your team and importance of the problem
+
+questions that focused and guided you; any initial hunches or hypotheses
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+# load packages
+library(GGally)
+library(ggplot2)
+library(car)
+library(leaps)
+library(stargazer)
+library(dplyr)
+library(psych)
+library(forecast)
+library(caTools)
+library(mlbench)
+library(caret)
+library(ROCR)
+library(class)
+library(egg)
+library(rpart)
+library(rattle)
+library(randomForest)
+library(rpart.plot)
+library(RColorBrewer)
+library(adabag)
+library(FNN)
+library(gains)
+library(clValid)
+library(cluster)
+library(factoextra)
+library(epiDisplay)
+library(dendextend)
+```
+
+## Part 2: Data Description
+
+data sources (provenance, lineage); how well documented?
+
+data preparation (imputation, normalization, transformation), data quality assessment / wrangling
+
+target variable(s) chosen and justification
+
+descriptive statistics and data visualizations
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+beijing <- read.csv("beijingPM2.5.csv")
+beijing$air <- factor(ifelse(beijing$PM_US.Post<50,"Good","Bad"))
+beijing$PM2.5 <- beijing$PM_US.Post
+beijing$seasonadj <- factor(beijing$season,levels = c(1,2,3,4),labels = c("Spring","Summer","Fall","Winter"))
+beijing$SW <- ifelse(substr(beijing$cbwd, 1, 2)=="SW", 1, 0)
+beijing$SE <- ifelse(substr(beijing$cbwd, 1, 2)=="SE", 1, 0)
+beijing$NW <- ifelse(substr(beijing$cbwd, 1, 2)=="NW", 1, 0)
+beijing$NE <- ifelse(substr(beijing$cbwd, 1, 2)=="NE", 1, 0)
+beijing$log <- log(beijing$PM_US.Post)
+options(scipen=999)
+# write.csv(beijing,"C:/Users/dingy/Desktop/rcode/datarobot.csv")
+```
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+# Data Description
+# Categorical variables
+categ <- names(beijing) %in% c("seasonadj","SW","SE","NE","NW","cbwd",'air')
+subdata <- beijing[!categ] # only numerical data
+# stargazer(subdata, type = 'text')
+
+# Compute median for all numeric variables
+data.frame(median=sapply(subdata, median))
+
+# Create a function to calculate mode
+getmode <- function(v){
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]}
+# Compute mode for all numeric variables
+pm2.5mod <- getmode(beijing$PM_US.Post)
+yearmod <- getmode(beijing$year)
+monthmod <- getmode(beijing$month)
+daymod <- getmode(beijing$day)
+hourmod <- getmode(beijing$hour)
+seasonmod<- getmode(beijing$season)
+dewpmod <- getmode(beijing$DEWP)
+humimod <- getmode(beijing$HUMI)
+presmod <- getmode(beijing$PRES)
+tempmod <- getmode(beijing$TEMP)
+iwsmod <- getmode(beijing$Iws)
+precmod <- getmode(beijing$precipitation)
+airmod<-getmode(beijing$air)
+```
+
+### 2.1 Boxplots for Categorical Variables
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+ggplot(beijing,aes(x=PM_US.Post))+
+  geom_histogram()+
+  xlim(0,450)+
+  labs(
+    y = "Number",
+    title = "Histogram of PM 2.5 in Beijing",
+    x = "PM 2.5"
+  )+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15),
+    panel.grid = element_line(color="snow",size=0.5,linetype = "dashed")
+  ) 
+# The plot is skewed to the right. Therefore, use log(PM2.5) when building models might be a better option.
+
+## Plot the relationship between target variable and categorical variables
+ggplot(beijing,aes(x=cbwd,y=PM_US.Post))+
+  geom_boxplot()+
+  labs(
+    x="Combined Wind Direction",
+    y="PM 2.5",
+    title="Boxplot for wind direction in Beijing"
+  )+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+## A closer look
+ggplot(beijing,aes(x=cbwd,y=PM_US.Post))+
+  geom_boxplot()+
+  labs(
+    x="Combined Wind Direction",
+    y="PM 2.5",
+    title="Boxplot for wind direction in Beijing"
+  )+
+  ylim(0,120)+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+# The wind directions from south have a higher average than north winds have.
+
+ggplot(beijing,aes(x=seasonadj,y=PM_US.Post))+
+  geom_boxplot()+
+  labs(
+    x="Season",
+    y="PM 2.5",
+    title="Boxplot for season in Beijing"
+  )+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=seasonadj,y=PM_US.Post))+
+  geom_boxplot()+
+  labs(
+    x="Season",
+    y="PM 2.5",
+    title="Boxplot for season in Beijing"
+  )+
+  ylim(0,120)+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=air,y=PM_US.Post))+
+  geom_boxplot()+
+  labs(
+    x="Good/Bad",
+    y="PM 2.5",
+    title="Boxplot for Good/Bad air condition in Beijing with PM2.5"
+  )+
+  ylim(0,120)+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=air,y=DEWP))+
+  geom_boxplot()+
+  labs(
+    x="Good/Bad",
+    y="Dew Point",
+    title="Boxplot for Good/Bad air condition in Beijing with dew point"
+  )+
+  ylim(0,35)+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=air,y=HUMI))+
+  geom_boxplot()+
+  labs(
+    x="Good/Bad",
+    y="Humidity",
+    title="Boxplot for Good/Bad air condition in Beijing with humidity"
+  )+
+  ylim(0,100)+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=air,y=PRES))+
+  geom_boxplot()+
+  labs(
+    x="Good/Bad",
+    y="Air Pressure",
+    title="Boxplot for Good/Bad air condition in Beijing with Air Pressure"
+  )+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=air,y=TEMP))+
+  geom_boxplot()+
+  labs(
+    x="Good/Bad",
+    y="Temperature",
+    title="Boxplot for Good/Bad air condition in Beijing with Temperature"
+  )+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+ggplot(beijing,aes(x=air,y=Iws))+
+  geom_boxplot()+
+  labs(
+    x="Good/Bad",
+    y="Wind Speed",
+    title="Boxplot for Good/Bad air condition in Beijing with Wind Speed"
+  )+
+  ylim(0,10)+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+tabpct(beijing$cbwd,beijing$air,xlab="Wind Direction",ylab="Air Condition",main = "Distribution of Air Condition by Wind Direction")
+tabpct(beijing$seasonadj,beijing$air,xlab="Season",ylab="Air Condition",main = "Distribution of Air Condition by Season")
+```
+
+### 2.2 Scatter Plots for Numeric Variables
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+list <- beijing[,c("PM2.5","HUMI","PRES","TEMP","Iws","precipitation","DEWP")]
+# Correlation between variables
+ggcorr(list, method = c("everything", "pearson"),low = "blueviolet", mid = "white", high = "darkgoldenrod3")
+
+s1 <- ggplot(beijing, aes(y= PM2.5, x=DEWP))+
+  geom_point(size = 0.1,color="rosybrown",alpha=0.8)+geom_smooth(color ='seagreen',size = 1)+ 
+  theme(
+    panel.background = element_rect(fill = "snow"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+s2 <- ggplot(beijing, aes(y= PM2.5, x=HUMI))+
+  geom_point(size = 0.1,color="rosybrown",alpha=0.8)+geom_smooth(color ='seagreen',size = 1)+ 
+  theme(
+    panel.background = element_rect(fill = "snow"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+s3 <- ggplot(beijing, aes(y= PM2.5, x=PRES))+
+  geom_point(size = 0.1,color="rosybrown",alpha=0.8)+geom_smooth(color ='seagreen',size = 1)+ 
+  theme(
+    panel.background = element_rect(fill = "snow"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+s4 <- ggplot(beijing, aes(y= PM2.5, x=TEMP))+
+  geom_point(size = 0.1,color="rosybrown",alpha=0.8)+geom_smooth(color ='seagreen',size = 1)+ 
+  theme(
+    panel.background = element_rect(fill = "snow"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+s5 <- ggplot(beijing, aes(y= PM2.5, x=Iws))+
+  geom_point(size = 0.1,color="rosybrown",alpha=0.8)+geom_smooth(color ='seagreen',size = 1)+ 
+  theme(
+    panel.background = element_rect(fill = "snow"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+s6 <- ggplot(beijing, aes(y= PM2.5, x=precipitation))+
+  geom_point(size = 0.1,color="rosybrown",alpha=0.8)+geom_smooth(color ='seagreen',size = 1)+ 
+  theme(
+    panel.background = element_rect(fill = "snow"),
+    panel.grid = element_blank(),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+
+# Scatter plots between variables
+ggarrange(s1,s2,s3,s4,s5,s6,ncol=2,nrow=3)
+```
+
+## Part 3. Multiple Regression Models
+
+comparison and contrast between Hand-Crafted Models and DataRobot Models
+
+management of outliers / overfitting / target leakage
+
+interpretation of results (coefficients, rules, trees, etc.)
+
+### 3.1 Regression Process
+
+### 3.2 Regression Interpretation
+
+### 3.3 Comparison with DataRobot
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+# Train valid split
+set.seed(66)
+train.index<- sample(c(1:nrow(beijing)),nrow(beijing)*0.8)
+train <- beijing[train.index,]
+valid <- beijing[-train.index,]
+
+# Delete outliers
+outlier.index <- c(which(train.index==13196),which(train.index==20833),which(train.index==12939),which(train.index==13037),which(train.index==5936),which(train.index==22344),which(train.index==20832),which(train.index==12859),which(train.index==22244),which(train.index==47897),which(train.index==47896),which(train.index==39045),which(train.index==46506),which(train.index==37045),which(train.index==28896),which(train.index==38692),which(train.index==47932),which(train.index==20573),which(train.index==13197),which(train.index==20174),which(train.index==16579),which(train.index==13159),which(train.index==46448),which(train.index==12168),which(train.index==37077),which(train.index==19698))
+
+train.df <- train[-outlier.index,]
+
+# Best model
+model.1 <- lm(log(PM_US.Post) ~ HUMI + seasonadj + Iws + cbwd + precipitation + I(PRES^2) + PRES + I(Iws*SW) + I(Iws*SE) + I(Iws*NW),data = train.df)
+summary(model.1)
+AIC(model.1)
+par(mfrow=c(1,1))
+plot(model.1)
+
+# Regression accuracy
+validation <- predict(model.1,valid)
+accuracy(model.1$fitted.values,train.df$log)
+accuracy(validation,valid$log)
+
+# Histogram of regression residuals
+ggplot(model.1,aes(x=model.1$residuals))+
+  geom_histogram(aes(y=..density..),bins = 30,colour="grey25",fill="white")+
+  stat_function(fun = dnorm,alpha=0.8,lwd=0.8, args = list(mean = mean(model.1$residuals), sd = sd(model.1$residuals)))+
+    geom_density(alpha=0.2,lwd=0.8,color="salmon")+
+  labs(
+    x= "Residuals",
+    y="",
+    title = "Histogram of Regression Residuals"
+  )+
+  theme(
+    panel.background = element_rect(fill = "snow2"),
+    panel.grid = element_line(color="snow",size=0.5,linetype = "dashed"),
+    axis.text.x = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.text.y = element_text(family = "Times",face = "bold",size = 10,color = "#993333"),
+    axis.line = element_line(color = "#993333",size = 1,linetype = "solid"),
+    text = element_text(color = "thistle4",face = "bold"),
+    plot.title = element_text(hjust = 0.5,size=15)
+  )
+```
+
+## Part 4. Classification Models
+
+### 4.1 Logistic Regression
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+# train valid split
+set.seed(66)
+train.index<- sample(c(1:nrow(beijing)),nrow(beijing)*0.7)
+train <- beijing[train.index,]
+valid <- beijing[-train.index,]
+
+outlier.index <- c(which(train.index==13196),which(train.index==32319),which(train.index==32322),which(train.index==22244),which(train.index==46506),which(train.index==37045),which(train.index==32321),which(train.index==32320),which(train.index==20832),which(train.index==12939),which(train.index==28896),which(train.index==13159),which(train.index==32247),which(train.index==12859),which(train.index==37077),which(train.index==20573),which(train.index==13197),which(train.index==12168),which(train.index==20834),which(train.index==38903))
+
+train.df <- train[-outlier.index,]
+
+model.2 <- glm(air ~ HUMI + PRES + I(PRES^2) + cbwd + Iws + precipitation + I(precipitation^2) + seasonadj , family=binomial(link="logit"),train.df)
+summary(model.2)
+plot(model.2)
+
+p <- predict(model.2,valid,type="response")
+p.train <- predict(model.2,train.df,type = "response")
+GorB <- ifelse(p>0.56,"Good","Bad")
+GorB.train <- ifelse(p.train>0.56,"Good","Bad")
+p_class <- factor(GorB,levels=levels(valid$air))
+p_class.train <- factor(GorB.train,levels=levels(train.df$air))
+confusionMatrix(p_class.train,train.df$air,positive = "Bad")
+confusionMatrix(p_class,valid$air,positive = "Bad")
+colAUC(p,valid$air,plotROC=TRUE)
+```
+
+### 4.2 Decision Tree
+
+```{r,echo = FALSE,results='hide',warning=FALSE,message=FALSE}
+set.seed(66)
+train.index<- sample(c(1:nrow(beijing)),nrow(beijing)*0.7)
+train <- beijing[train.index,]
+valid <- beijing[-train.index,]
+
+set.seed(1)
+tree <- rpart(air ~ DEWP + HUMI + PRES + I(PRES^2) + TEMP + cbwd + Iws + precipitation + I(precipitation^2) + seasonadj, data = train, method = "class", cp = 0.00001, minsplit = 1, xval = 5)
+length(tree$frame$var[tree$frame$var == "<leaf>"])
+# printcp(tree.2) # Print out the cp table of cross-validation errors.
+
+pruned.tree <- prune(tree, cp = 0.000559203 )
+fancyRpartPlot(pruned.tree)
+
+## Check Confusion Matrix for training set
+pred.pruned.tree <- predict(pruned.tree, train, type='class') 
+confusionMatrix(pred.pruned.tree, train$air,positive = "Bad")
+## Repeat the process for test set
+pred.pruned.tree.valid <- predict(pruned.tree, valid, type='class')
+confusionMatrix(pred.pruned.tree.valid, valid$air,positive = "Bad")
+
+# plot roc curve
+prob <- predict(pruned.tree,valid,type = "prob")[,2]
+pred <- prediction(prob,valid$air)
+perf1 <- performance(pred,"tpr","fpr")
+plot(perf1)
+
+perf2 <- performance(pred,"auc")
+print(perf2@y.values[[1]])
+```
+
+## Part 5. Conclusions and Reflections
+
+overall conclusions, insights, surprises
+
+reflections about the journey (process, roadblocks; pivoting, iterating)
+
+professionalism of writing / visualizations / organization / delivery
