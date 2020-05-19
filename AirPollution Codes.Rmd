@@ -1,6 +1,6 @@
 ---
-title: "Da Da Da_PM2.5_Cluster"
-author: "Da Da Da"
+title: "PM2.5 Prediction in China cities"
+author: "Yu Ding, Sirui Jiang, Aileen Kate Fu, Kangning Chen"
 date: "April 16, 2020"
 output:
   word_document: default
