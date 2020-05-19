@@ -196,6 +196,5 @@ ggplot(us,
   labs(x='Confirmation date',
        y='Cases')+
   scale_size(range=c(2,15))
-
 # Animated buble plot
 p + transition_time(day)
